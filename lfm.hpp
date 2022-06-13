@@ -43,6 +43,7 @@ static void random_array(int x, int y, vector<vector<double>> &array)
 {
     srand(time(0));
     array.resize(x);
+#pragma omp parallel for
     for (int i = 0; i < x; ++i) {
         array[i].resize(y);
         for (int j = 0; j < y; ++j) {

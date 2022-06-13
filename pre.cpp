@@ -35,7 +35,7 @@ int main()
 {
     vector<unordered_map<int, double>> scores;
     read_file("../data/train.txt", scores);
-    preprocess(20, scores);
+    preprocess(10, scores);
     return 0;
 }
 
