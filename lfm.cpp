@@ -18,13 +18,18 @@ int main(int argc, char **argv)
         ios::sync_with_stdio(false);
         vector<unordered_map<int, double>> scores;
         int items = read_file("./realtrain.txt", scores);
-        LFM_model(scores, items, 30, 0.0002, 0.0001, 300, 1);
-        double mse = validate(642960);
+        vector<vector<double>> P, Q;
+        LFM_model(scores, items, 30, 0.0002, 0.0001, 300, 1, P, Q);
+        double mse = validate(P, Q);
         ofstream out("mse.txt");
         out << mse << endl;
         out.close();
+        predict(P, Q);
     } else {
-        predict(64296);
+        vector<vector<double>> P, Q;
+        read_matrix("./models/P.txt", P);
+        read_matrix("./models/Q.txt", Q);
+        predict(P, Q);
     }
     return 0;
 }

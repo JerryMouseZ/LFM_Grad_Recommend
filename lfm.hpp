@@ -52,27 +52,29 @@ static void random_array(int x, int y, vector<vector<double>> &array)
     }
 }
 
-static void matrix_mul(vector<vector<double>> &P, vector<vector<double>> &Q, int x, int y)
+static void model_persist(vector<vector<double>> &P, vector<vector<double>> &Q)
 {
-#pragma omp parallel for
-    for (int i = 0; i < x; ++i) {
-        vector<double> line(y);
-        for (int k = 0; k < Q.size(); ++k) {
-            for (int j = 0; j < y; ++j) {
-                line[j] += P[i][k] * Q[k][j];
-            }
-        }
-        
-        // 内存不够了，写入文件
-        char filename[24];
-        sprintf(filename, "models/%d.txt", i);
-        ofstream output(filename);
-        for (int j = 0; j < y; ++j) {
-            output << line[j] << " ";
+    char filename[24];
+    sprintf(filename, "models/P.txt");
+    // 内存不够了，写入文件
+    ofstream output(filename);
+    for (int i = 0; i < P.size(); ++i) {
+        for (int j = 0; j < P[i].size(); ++j) {
+            output << P[i][j] << " ";
         }
         output << endl;
-        output.close();
     }
+    output.close();
+
+    sprintf(filename, "models/Q.txt");
+    output.open(filename);
+    for (int i = 0; i < Q.size(); ++i) {
+        for (int k = 0; k < Q[i].size(); ++k) {
+            output << Q[i][k] << " ";
+        }
+        output << endl;
+    }
+    output.close();
 }
 
 static double norm(vector<vector<double>> &matrix)
@@ -130,12 +132,10 @@ static double train_iter(vector<unordered_map<int, double>> &R, vector<vector<do
     return eui;
 }
 
-static void LFM_model(vector<unordered_map<int, double>> &R, int max_iterm, int factors, double alpha, double lamda, int max_step, double min_eui)
+static void LFM_model(vector<unordered_map<int, double>> &R, int max_iterm, int factors, double alpha, double lamda, int max_step, double min_eui, vector<vector<double>> &P, vector<vector<double>> &Q)
 {
     auto start = clock();
     int m = R.size();
-    vector<vector<double>> P;
-    vector<vector<double>> Q;
     random_array(m, factors, P);
     random_array(factors, max_iterm, Q);
 
@@ -145,46 +145,61 @@ static void LFM_model(vector<unordered_map<int, double>> &R, int max_iterm, int 
             break;
     }
 
-    matrix_mul(P, Q, m, max_iterm);
     auto end = clock();
     cout<< "training time = " << double(end-start) / CLOCKS_PER_SEC << "s" << endl;
+    model_persist(P, Q);
 }
 
-static void read_user(int user, vector<double> &array)
+static void read_matrix(const char *filename, vector<vector<double>> &matrix)
 {
-    char filename[24];
-    sprintf(filename, "models/%d.txt", user);
     ifstream input(filename);
-    for (int j = 0; j < array.size(); ++j) {
-        input >> array[j];
+    double value;
+    string line;
+    int i = 0;
+    while (getline(input, line)) {
+        matrix.emplace_back(vector<double>());
+        istringstream iss(line);
+        vector<double> &row = matrix[i];
+        while (iss >> value){
+            row.emplace_back(value);
+        }
+        i++;
     }
     input.close();
 }
 
-static double validate(int items)
+static double predict_score(int user, int item, vector<vector<double>> &P, vector<vector<double>> &Q)
+{
+    int l = Q.size();
+    double res = 0;
+    for (int i = 0; i < l; ++i) {
+        res += P[user][i] * Q[i][item];
+    }
+    return res;
+}
+
+static double validate(vector<vector<double>> &P, vector<vector<double>> &Q)
 {
     ifstream input("validate.txt");
     string line;
     int user = -1;
     int item_id = -1;
     double score;
-    vector<double> user_data(items);
     double mse = 0;
     int count = 0;
     while (getline(input, line)) {
         istringstream iss(line);
         if (line.find('|') != -1) {
             iss >> user;
-            // read the matrix line of the user
-            read_user(user, user_data);
         } else {
             istringstream iss(line);
             iss >> item_id >> score;
-            mse += abs(user_data[item_id] - score);
+            double value = predict_score(user, item_id, P, Q);
+            mse += abs(value - score);
             count++;
         }
     }
-    
+
     mse /= count;
     input.close();
 
@@ -192,7 +207,7 @@ static double validate(int items)
     return mse;
 }
 
-static void predict(int items)
+static void predict(vector<vector<double>> &P, vector<vector<double>> &Q)
 {
     auto start = clock();
     ifstream input("../data/test.txt");
@@ -200,18 +215,15 @@ static void predict(int items)
     string line;
     int user = -1;
     int item_id = -1;
-    vector<double> user_data(items);
     while (getline(input, line)) {
         istringstream iss(line);
         if (line.find('|') != -1) {
             iss >> user;
             output << user << "|6" << endl;
-            // read the matrix line of the user
-            read_user(user, user_data);
         } else {
             istringstream iss(line);
             iss >> item_id;
-            output << item_id << "  " << user_data[item_id] << endl;
+            output << item_id << "  " << predict_score(user, item_id, P, Q) << endl;
         }
     }
     output.close();
